@@ -26,7 +26,7 @@ import base64
 import random as _pyrandom
 
 GAME_TITLE = "金丝笼"
-GAME_VERSION = "0.1.0-mvp"
+GAME_VERSION = "0.2.0"
 
 # ============================================================
 # 一、可复现随机数（Mulberry32，state 是单个 32bit 整数，方便存档）
@@ -81,38 +81,48 @@ TAGS = ["挚爱", "家人", "仆从", "盟友", "外来者"]
 AVATAR_POOL = ["🎭", "🗡️", "📜", "🕊️", "🐍", "🌙", "🔥", "🌿", "⚱️", "🦢",
                "🩸", "🎋", "🪶", "⚔️", "🌾", "🕯️"]
 
-NAME_POOL = [
-    "阿尔萨", "薇伊拉", "扎里夫", "米娜卓", "科尔文", "娜迪雅", "巴沙尔", "莱拉恩",
-    "图兰朵", "赛义德", "法蒂玛", "达尔尚", "尤瑟夫", "阿米拉", "哈桑", "萝希妲",
-    "卡西姆", "茵朵拉", "扎希尔", "梅露珊",
+# 名字按性别分池，卡牌先定性别再取名，保证秘密/墓志铭里的代词对得上人
+NAME_POOL_M = [
+    "阿尔萨", "扎里夫", "科尔文", "巴沙尔", "赛义德", "达尔尚", "尤瑟夫",
+    "哈桑", "卡西姆", "扎希尔",
+]
+NAME_POOL_F = [
+    "薇伊拉", "米娜卓", "娜迪雅", "莱拉恩", "图兰朵", "法蒂玛", "阿米拉",
+    "萝希妲", "茵朵拉", "梅露珊",
 ]
 
+# 秘密/墓志铭是模板：{ta} 按卡牌性别填"他/她"，{zi} 填"子/女"
 SECRET_POOL = [
-    "他其实是前朝余党安插的眼线，每月都要传出一份密信。",
-    "她曾经在别的宫廷里下毒害死过一位主人，事后从未被发现。",
-    "他偷偷藏着一枚可以打开密室的钥匙，来源不明。",
-    "她其实识字，而且读过被列为禁书的《先知的忏悔录》。",
-    "他年轻时救过权力者一命，但对方早已忘记，他却始终记得。",
-    "她与神殿的祭司有着不能公开的往来。",
-    "他的忠诚是装出来的——家人还被扣在别处当人质。",
-    "她曾亲手埋葬过一位死于宫廷阴谋的旧主人，从此变得沉默。",
-    "他梦到过权力者的死状，梦境精确得可怕。",
-    "她其实是逃亡贵族的私生女，身份一旦暴露就是灭顶之灾。",
+    "{ta}其实是前朝余党安插的眼线，每月都要传出一份密信。",
+    "{ta}曾经在别的宫廷里下毒害死过一位主人，事后从未被发现。",
+    "{ta}偷偷藏着一枚可以打开密室的钥匙，来源不明。",
+    "{ta}其实识字，而且读过被列为禁书的《先知的忏悔录》。",
+    "{ta}年轻时救过权力者一命，但对方早已忘记，{ta}却始终记得。",
+    "{ta}与神殿的祭司有着不能公开的往来。",
+    "{ta}的忠诚是装出来的——家人还被扣在别处当人质。",
+    "{ta}曾亲手埋葬过一位死于宫廷阴谋的旧主人，从此变得沉默。",
+    "{ta}梦到过权力者的死状，梦境精确得可怕。",
+    "{ta}其实是逃亡贵族的私生{zi}，身份一旦暴露就是灭顶之灾。",
 ]
 
 ITEM_NAME_POOL = ["一枚镶红宝石的胸针", "一柄象牙柄的匕首", "半卷褪色的古籍",
                    "一串来路不明的珍珠", "一尊小巧的银质神像", "一方带暗格的木盒"]
 
 EPITAPH_POOL = [
-    "「刀落下的那一刻，他好像松了一口气。」",
-    "「她没有喊叫，只是望着窗外的月亮，像是终于不用再演戏了。」",
+    "「刀落下的那一刻，{ta}好像松了一口气。」",
+    "「{ta}没有喊叫，只是望着窗外的月亮，像是终于不用再演戏了。」",
     "「至死都没说出那个秘密——带走了，也算一种忠诚。」",
-    "「他笑着说，这比病死在床上体面多了。」",
+    "「{ta}笑着说，这比病死在床上体面多了。」",
     "「血顺着石阶流下去，没人敢上前擦。」",
-    "「她最后的话是一句没说完的名字。」",
-    "「据说他葬礼那天，连乌鸦都不肯落在墓碑上。」",
-    "「他曾是这座笼子里唯一敢直视权力者的人。」",
+    "「{ta}最后的话是一句没说完的名字。」",
+    "「据说{ta}葬礼那天，连乌鸦都不肯落在墓碑上。」",
+    "「{ta}曾是这座笼子里唯一敢直视权力者的人。」",
 ]
+
+
+def _fill_pronouns(tpl, gender):
+    return tpl.format(ta="他" if gender == "男" else "她",
+                      zi="子" if gender == "男" else "女")
 
 # ---- 事件模板：每个 place 若干个，每个含 2 个 approach ----
 # difficulty: 4-14；amount 类效果按周数在运行时缩放的不在这里做，事件效果是固定量级
@@ -338,10 +348,12 @@ COMMAND_TYPES = {
 ENDING_FLAVOR = {
     "processed": "刀落下来的时候，宫廷的钟正好敲了一下。",
     "purged": "他们没有敲门。",
+    "exiled": "出乎所有人意料，刀没有落下。你被剥去衣冠，连夜逐出宫门——身后的金丝笼还亮着灯，而你终于不用再回头了。",
     "survive_good": "笼子还是金的，但至少，笼子里的人都还活着，也还爱着彼此。",
     "survive_normal": "你活下来了。这大概已经是这座笼子里能要求的最好结果。",
     "survive_bad": "你活下来了，代价是身边空了大半——这样的胜利，很难说得上是胜利。",
     "regicide": "刀刺进去的那一刻，你才发现自己的手一直在抖。",
+    "regicide_defy": "这一次，密室里备好的一切，替你把剩下的话说完了。",
 }
 
 # ============================================================
@@ -359,7 +371,7 @@ class ContentProvider:
     def draw_board(self, week, used_ids, count, r):
         raise NotImplementedError
 
-    def make_card(self, r, tag_pool=None):
+    def make_card(self, r, tag_pool=None, used_names=None, used_secrets=None):
         raise NotImplementedError
 
 
@@ -381,7 +393,10 @@ class StaticPoolProvider(ContentProvider):
             tag = TAGS[tag_idx] if progress > 0.55 else r.choice(TAGS[:3])
             filter_desc = "标记为「%s」的人" % tag
             demand = spec["demand_tpl"].format(filter_desc=filter_desc)
-            acceptance = {"kind": "sacrifice", "filter": {"tag": tag}}
+            # 赎买价：约为同期资源命令的两倍，代价远高于正常献祭，
+            # 但保证"手里没有对应标记"不再是结构性死局
+            ransom = _clamp(int((60 + progress * 220) * 2 + r.randint(-20, 20)), 120, 560)
+            acceptance = {"kind": "sacrifice", "filter": {"tag": tag}, "ransom": ransom}
         return {"week": week, "type": ctype, "title": title, "demand": demand,
                 "acceptance": acceptance}
 
@@ -393,19 +408,24 @@ class StaticPoolProvider(ContentProvider):
         picks = r.sample(pool, min(count, len(pool)))
         return [dict(p, approaches=[dict(a) for a in p["approaches"]]) for p in picks]
 
-    def make_card(self, r, tag_pool=None):
-        name = r.choice(NAME_POOL)
+    def make_card(self, r, tag_pool=None, used_names=None, used_secrets=None):
+        gender = r.choice(["男", "女"])
+        name_pool = NAME_POOL_M if gender == "男" else NAME_POOL_F
+        avail_names = [n for n in name_pool if n not in (used_names or ())]
+        name = r.choice(avail_names or name_pool)
         avatar = r.choice(AVATAR_POOL)
         attrs = {a: r.randint(2, 8) for a in ATTRS}
         # 每张卡给一个"高光属性"，避免过于平庸
         boost = r.choice(ATTRS)
         attrs[boost] = _clamp(attrs[boost] + r.randint(1, 2), 1, 10)
         tag = r.choice(tag_pool or TAGS)
-        secret = r.choice(SECRET_POOL)
+        avail_secrets = [s for s in SECRET_POOL if s not in (used_secrets or ())]
+        secret_tpl = r.choice(avail_secrets or SECRET_POOL)
         return {
-            "name": name, "avatar": avatar, "attrs": attrs, "tags": [tag],
-            "status": "healthy", "bond": r.randint(40, 60),
-            "secret": secret, "secret_revealed": False, "epitaph": None,
+            "name": name, "gender": gender, "avatar": avatar, "attrs": attrs,
+            "tags": [tag], "status": "healthy", "bond": r.randint(40, 60),
+            "secret": _fill_pronouns(secret_tpl, gender), "secret_tpl": secret_tpl,
+            "secret_revealed": False, "epitaph": None,
             "wound_idle_days": 0,
         }
 
@@ -458,8 +478,11 @@ def fresh_state(seed=None, weeks=5, provider="static"):
         "day_log": [],
         "stats": {"checks": 0, "successes": 0, "gold_earned": 0},
     }
+    used_names, used_secrets = set(), set()
     for _ in range(4):
-        c = prov.make_card(r)
+        c = prov.make_card(r, used_names=used_names, used_secrets=used_secrets)
+        used_names.add(c["name"])
+        used_secrets.add(c["secret_tpl"])
         c["id"] = "card_%03d" % state["next_card_id"]
         state["next_card_id"] += 1
         state["cards"].append(c)
@@ -588,7 +611,8 @@ def cmd_dispatch(state, board_idx, appr_idx, card_id):
     appr = ev["approaches"][appr_idx]
     r = _rng(state)
     ok, d, v = _roll(r, card, appr["attr"], appr["difficulty"])
-    _commit_rng(state, r)
+    # 注意：r 在下面还要抽失败猜疑/珍宝，统一在结算末尾 _commit_rng，
+    # 否则这些抽取不落盘，会和下一次掷骰复用同一段随机流
 
     state["ap"] -= 1
     state["dispatched_today"].append(ev["id"])
@@ -641,12 +665,14 @@ def cmd_dispatch(state, board_idx, appr_idx, card_id):
             if state["conspiracy_step"] >= len(CONSPIRACY_CHAIN):
                 state["conspiracy_done"] = True
                 lines.append("密谋的最后一步，你走完了。")
+                lines.append("（万事俱备。等下一个审判日，你终于可以说「不」了。）")
             else:
                 lines.append("密谋推进了一步。")
         else:
             state["suspicion"] = _clamp(state["suspicion"] + 25, 0, 999)
             lines.append("密谋出了岔子，权力者身边的人似乎警觉了起来。")
 
+    _commit_rng(state, r)
     _maybe_suspicion_hint(state, lines)
     if state["suspicion"] >= 100 and not state["pending_judgment"]:
         _trigger_ending(state, "purged", "抄家")
@@ -725,12 +751,21 @@ def _render_judgment_prompt(state):
                     (acc["resource"], state.get(acc["resource"], 0), acc["amount"]))
     else:
         tag = acc["filter"]["tag"]
+        ransom = acc.get("ransom")
         candidates = [c for c in state["cards"] if c["status"] != "dead" and tag in c["tags"]]
         if candidates:
-            out.append("需要交出一位标记为「%s」的人。可选：%s。用 sacrifice <id> 执行，或 defy 抗命。" %
-                        (tag, "、".join("%s(%s)" % (c["name"], c["id"]) for c in candidates)))
+            line = ("需要交出一位标记为「%s」的人。可选：%s。用 sacrifice <id> 执行" %
+                    (tag, "、".join("%s(%s)" % (c["name"], c["id"]) for c in candidates)))
+            if ransom:
+                line += "；或 pay 以 %d 金赎买这条命（现有 %d）" % (ransom, state["gold"])
+            line += "；或 defy 抗命。"
+            out.append(line)
+        elif ransom:
+            out.append("你手里没有标记为「%s」的人可以献祭。可以 pay 以 %d 金赎买这道命令"
+                        "（现有 %d，可先 sell 变卖珍宝），或 defy 抗命。" % (tag, ransom, state["gold"]))
         else:
-            out.append("你手里没有标记为「%s」的人可以献祭——恐怕只能 defy 抗命，或想别的办法（变卖珍宝不影响此类命令）。" % tag)
+            # 兼容 v0.1 旧存档：命令里没有赎金字段
+            out.append("你手里没有标记为「%s」的人可以献祭——恐怕只能 defy 抗命。" % tag)
     return "\n".join(out)
 
 
@@ -738,8 +773,16 @@ def cmd_pay(state):
     if not state["pending_judgment"]:
         return "现在不是审判日。"
     acc = state["command"]["acceptance"]
-    if acc["kind"] != "resource":
-        return "这周的命令不是要资源，用不了 pay。"
+    if acc["kind"] == "sacrifice":
+        # 赎买：用远高于正常的金价替下那条命
+        ransom = acc.get("ransom")
+        if not ransom:
+            return "这周的命令不是要资源，用不了 pay。"
+        if state["gold"] < ransom:
+            return "赎买需要 %d 金（现有 %d）。可以先变卖珍宝（sell），或 sacrifice / defy。" % (ransom, state["gold"])
+        state["gold"] -= ransom
+        state["suspicion"] = _clamp(state["suspicion"] + 8, 0, 999)
+        return _pass_judgment(state, "你捧出 %d 金，替下了那条命。权力者收下了钱——只是那道目光，在你脸上多停了一瞬。" % ransom)
     res, amt = acc["resource"], acc["amount"]
     if state.get(res, 0) < amt:
         return "%s 不够（有 %d，需要 %d）。可以先变卖珍宝（sell），或 defy。" % (res, state.get(res, 0), amt)
@@ -761,7 +804,7 @@ def cmd_sacrifice(state, card_id):
         return "%s 不符合这次命令要求的标记「%s」。" % (card["name"], tag)
     card["status"] = "dead"
     r = _rng(state)
-    card["epitaph"] = r.choice(EPITAPH_POOL)
+    card["epitaph"] = _fill_pronouns(r.choice(EPITAPH_POOL), card.get("gender", "男"))
     _commit_rng(state, r)
     return _pass_judgment(state, "%s 被献了出去。%s" % (card["name"], card["epitaph"]))
 
@@ -769,8 +812,20 @@ def cmd_sacrifice(state, card_id):
 def cmd_defy(state):
     if not state["pending_judgment"]:
         return "现在不是审判日。"
-    _trigger_ending(state, "processed", "抗命被处死")
-    return "你选择了抗命。%s\n%s" % (ENDING_FLAVOR["processed"], _status_bar(state))
+    # 密谋已成：说「不」的这一刻，就是动手的时刻
+    if state["conspiracy_done"]:
+        _trigger_ending(state, "regicide", "弑君")
+        return "你说了「不」。%s\n%s" % (ENDING_FLAVOR["regicide_defy"], _status_bar(state))
+    # 否则生死取决于猜疑值：越受猜忌，刀落得越快
+    r = _rng(state)
+    roll = r.randint(1, 100)
+    _commit_rng(state, r)
+    death_chance = _clamp(55 + state["suspicion"], 5, 95)
+    if roll <= death_chance:
+        _trigger_ending(state, "processed", "抗命被处死")
+        return "你选择了抗命。%s\n%s" % (ENDING_FLAVOR["processed"], _status_bar(state))
+    _trigger_ending(state, "exiled", "抗命·放逐")
+    return "你选择了抗命。%s\n%s" % (ENDING_FLAVOR["exiled"], _status_bar(state))
 
 
 def _pass_judgment(state, note):
@@ -850,8 +905,9 @@ def _status_bar(state):
 
 
 def render_status(state):
-    lines = ["📅 第 %d/%d 周 · 第 %d/7 天　行动点 %d/%d　💰%d　🗝️%d" %
-              (state["week"], state["total_weeks"], state["day"], state["ap"], state["ap_max"],
+    day_disp = "审判日" if state["day"] > 7 else ("第 %d/7 天" % state["day"])
+    lines = ["📅 第 %d/%d 周 · %s　行动点 %d/%d　💰%d　🗝️%d" %
+              (state["week"], state["total_weeks"], day_disp, state["ap"], state["ap_max"],
                state["gold"], state["intel"])]
     lines.append("本周命令【%s·%s】：%s" % (state["command"]["type"], state["command"]["title"], state["command"]["demand"]))
     lines.append("—— 手牌 ——")
@@ -956,9 +1012,9 @@ HELP_TEXT = """🏛 金丝笼 · 可用指令
   dispatch <编号> <方式> <卡>  派遣一张卡去处理事件（消耗1行动点）
   talk <卡id>                夜谈（每天1次，羁绊+4；第3次揭示秘密+情报）
   endday                     结束今天，推进到下一天
-  pay                        审判日：上缴资源
+  pay                        审判日：上缴资源（献祭类命令也可用它高价赎买）
   sacrifice <卡id>            审判日：献祭一张卡
-  defy                       审判日：抗命（大概率死局）
+  defy                       审判日：抗命（生死难料，权力者的猜疑说了算）
   sell <珍宝id>               变卖一件珍宝换金币
   folio                      万物志（卡牌与秘密、弑君线进度）
   chronicle [n]              最近n天的纪事（默认10）
@@ -1039,8 +1095,13 @@ def _dispatch_one(part):
 
 
 def new_game(seed=None, weeks=5):
-    return _dispatch_one("new%s%s" % (" " + str(seed) if seed is not None else "",
-                                        " " + str(weeks) if seed is not None else (" " + str(weeks) if weeks != 5 else "")))
+    # "new" 的参数是位置式的（new [seed] [weeks]），只给 weeks 时必须补一个
+    # 真实随机的 seed 占位，否则 weeks 会被当成 seed 解析（v0.1 的 bug）
+    if seed is None and weeks == 5:
+        return _dispatch_one("new")
+    if seed is None:
+        seed = _pyrandom.randint(1, 2**31 - 1)
+    return _dispatch_one("new %d %d" % (int(seed), int(weeks)))
 
 
 if __name__ == "__main__":

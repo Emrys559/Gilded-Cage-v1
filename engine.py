@@ -26,7 +26,7 @@ import base64
 import random as _pyrandom
 
 GAME_TITLE = "金丝笼"
-GAME_VERSION = "0.3.0"
+GAME_VERSION = "0.4.0"
 
 # ============================================================
 # 一、可复现随机数（Mulberry32，state 是单个 32bit 整数，方便存档）
@@ -153,9 +153,10 @@ def _fill_pronouns(tpl, gender):
 # difficulty: 4-14；amount 类效果按周数在运行时缩放的不在这里做，事件效果是固定量级
 
 
-def _ev(id_, place, title, text, approaches, threat=False, bribe_cost=None):
+def _ev(id_, place, title, text, approaches, threat=False, bribe_cost=None, neglect=None):
     return {"id": id_, "place": place, "title": title, "text": text,
-            "approaches": approaches, "threat": threat, "bribe_cost": bribe_cost}
+            "approaches": approaches, "threat": threat, "bribe_cost": bribe_cost,
+            "neglect": neglect}
 
 
 EVENT_TEMPLATES = [
@@ -198,7 +199,7 @@ EVENT_TEMPLATES = [
             {"label": "宁多勿少", "attr": "grit", "difficulty": 7,
              "success": {"gold": -20, "suspicion_delta": -4},
              "failure": {"gold": -40}},
-        ]),
+        ], neglect={"suspicion_delta": 6}),
     _ev("ev_market_gamble", "集市", "香料商人的赌局",
         "一个满脸油光的商人支起摊子，说这局稳赚不赔——他们都这么说。",
         [
@@ -238,7 +239,7 @@ EVENT_TEMPLATES = [
             {"label": "动手教训", "attr": "might", "difficulty": 8,
              "success": {"bond_delta": 3},
              "failure": {"wound": True}},
-        ], threat=True, bribe_cost=45),
+        ], threat=True, bribe_cost=45, neglect={"gold": -25}),
     _ev("ev_alley_smuggler", "暗巷", "走私者的暗号",
         "墙根下有人用你听不懂的暗语交谈，气氛不对，但情报可能就在这。",
         [
@@ -268,7 +269,7 @@ EVENT_TEMPLATES = [
             {"label": "抽身而退", "attr": "grit", "difficulty": 7,
              "success": {"suspicion_delta": 0},
              "failure": {"wound": True}},
-        ], threat=True, bribe_cost=90),
+        ], threat=True, bribe_cost=90, neglect={"wound_random": True, "suspicion_delta": 3}),
     _ev("ev_temple_confession", "神殿", "祭司的旁听",
         "祭司愿意为你占卜前程，代价是你要先坦白一件不光彩的事。",
         [
@@ -390,7 +391,7 @@ class ContentProvider:
     """内容供给的抽象接口。规则引擎只认这一层接口，不关心内容从哪来——
     这样以后接 LLMProvider / HybridProvider 时，规则引擎代码不需要改一行。"""
 
-    def draw_command(self, week, total_weeks, r, suspicion=0):
+    def draw_command(self, week, total_weeks, r, suspicion=0, alive_tags=None):
         raise NotImplementedError
 
     def draw_board(self, week, used_ids, count, r):
@@ -403,21 +404,28 @@ class ContentProvider:
 class StaticPoolProvider(ContentProvider):
     """MVP 内容供给：从本文件内置的静态内容池里抽取/组装，不依赖任何外部 API。"""
 
-    def draw_command(self, week, total_weeks, r, suspicion=0):
+    def draw_command(self, week, total_weeks, r, suspicion=0, alive_tags=None):
         ctype = r.choice(list(COMMAND_TYPES.keys()))
         spec = COMMAND_TYPES[ctype]
         title = r.choice(spec["titles"])
         progress = week / max(1, total_weeks)
         # 猜疑越重，权力者越疑神疑鬼、越爱抓着你多要一点——命令的定价不只看周数
-        susp_factor = suspicion * 0.8
+        # （系数不宜太高：这会和检定环节的猜疑税相互放大，测试中一度导致 8/8 局全灭）
+        susp_factor = suspicion * 0.4
         if spec["kind"] == "resource":
             amount = _clamp(int(60 + progress * 220 + susp_factor + r.randint(-15, 15)), 60, 320)
             demand = spec["demand_tpl"].format(amount=amount)
             acceptance = {"kind": "resource", "resource": spec["resource"], "amount": amount}
         else:
-            # 越到后期，越可能要求献祭更"贵重"的牌（tag 越靠后越珍贵，简单用索引模拟）
             tag_idx = min(len(TAGS) - 1, int(progress * len(TAGS)))
-            tag = TAGS[tag_idx] if progress > 0.55 else r.choice(TAGS[:3])
+            pool = TAGS if progress > 0.55 else TAGS[:3]
+            tag = TAGS[tag_idx] if progress > 0.55 else r.choice(pool)
+            # 大多数时候，权力者点名的是"你手里真的还有"的标记——赎买应该是
+            # 手气不好时的例外出口，而不是牌越死越少之后必然滚雪球式撞上的常态
+            if alive_tags:
+                present = [t for t in pool if t in alive_tags]
+                if present and r.next() < 0.78:
+                    tag = r.choice(present)
             filter_desc = "标记为「%s」的人" % tag
             demand = spec["demand_tpl"].format(filter_desc=filter_desc)
             # 赎买价：约为同期资源命令的两倍，代价远高于正常献祭，
@@ -534,8 +542,9 @@ def _provider(state):
 
 def _draw_command(state):
     r = _rng(state)
+    alive_tags = {t for c in state["cards"] if c["status"] != "dead" for t in c["tags"]}
     state["command"] = _provider(state).draw_command(
-        state["week"], state["total_weeks"], r, suspicion=state["suspicion"])
+        state["week"], state["total_weeks"], r, suspicion=state["suspicion"], alive_tags=alive_tags)
     _commit_rng(state, r)
 
 
@@ -675,9 +684,14 @@ def cmd_dispatch(state, board_idx, appr_idx, card_id):
     susp_d = eff.get("suspicion_delta", 0)
     if not ok and "suspicion_delta" not in eff:
         susp_d = r.randint(0, 8)
-    if ok and appr["difficulty"] <= 6:
-        # 赢得太轻松也是一种引人注目——纯靠"挑最稳的选项"不该是零代价的
-        susp_d += 1
+    if ok:
+        # 代价不该看事件的静态难度，该看"这张牌去做这件事有多稳"——
+        # 只对真正接近包赢的选择收税，常规的六到八成把握不该被惩罚
+        p = _chance(card, appr["attr"], appr["difficulty"])
+        if p >= 0.95:
+            susp_d += 2
+        elif p >= 0.85:
+            susp_d += 1
     if susp_d:
         state["suspicion"] = _clamp(state["suspicion"] + susp_d, 0, 999)
     if eff.get("wound") and card["status"] == "healthy":
@@ -844,6 +858,38 @@ def cmd_resolve(state, card_id):
     return "\n".join(lines) + "\n" + _status_bar(state)
 
 
+def _apply_neglect(state, lines):
+    """今天没人管的事，不会就这么算了。"""
+    for ev in state["board"]:
+        if ev["id"] == "conspiracy":
+            continue
+        if ev["id"] in state["dispatched_today"]:
+            continue
+        neg = ev.get("neglect")
+        if not neg:
+            continue
+        parts = []
+        gold_d = neg.get("gold", 0)
+        if gold_d:
+            state["gold"] = max(0, state["gold"] + gold_d)
+            parts.append("金币 %+d" % gold_d)
+        susp_d = neg.get("suspicion_delta", 0)
+        if susp_d:
+            state["suspicion"] = _clamp(state["suspicion"] + susp_d, 0, 999)
+        if neg.get("wound_random"):
+            alive = [c for c in state["cards"] if c["status"] == "healthy"]
+            if alive:
+                r = _rng(state)
+                if r.next() < 0.5:
+                    victim = r.choice(alive)
+                    victim["status"] = "wounded"
+                    victim["wound_idle_days"] = 0
+                    parts.append("%s 受了伤" % victim["name"])
+                _commit_rng(state, r)
+        note = "「%s」没人理会——" % ev["title"] + ("，".join(parts) if parts else "但似乎也没留下痕迹")
+        lines.append(note)
+
+
 def cmd_endday(state):
     if state["pending_judgment"]:
         return "审判日事务未了结，先处理 pay / sacrifice / defy。"
@@ -853,6 +899,7 @@ def cmd_endday(state):
     lines = [header]
     if state["day_log"]:
         lines.append("　" + "；".join(state["day_log"]))
+    _apply_neglect(state, lines)
     # 受伤自愈：连续两天没被派遣的负伤角色会自动痊愈
     for c in state["cards"]:
         if c["status"] == "wounded":
@@ -1082,7 +1129,7 @@ def render_board(state):
         done = "（已处理）" if ev["id"] in state["dispatched_today"] else ""
         threat_tag = "　⚠️可用 bribe %d 买通(%d金)" % (i, ev["bribe_cost"]) if ev.get("threat") and not done else ""
         lines.append("[%d] %s ｜ %s %s%s" % (i, ev["place"], ev["title"], done, threat_tag))
-    lines.append("用 approach <编号> 查看应对方式，preview/dispatch 需要指定卡牌。")
+    lines.append("用 approach <编号> 查看应对方式与全部卡牌的成功率。")
     return "\n".join(lines) + "\n" + _status_bar(state)
 
 
@@ -1090,11 +1137,17 @@ def render_approach(state, idx):
     ev = _find_board(state, idx)
     if ev is None:
         return "没有这个场所编号。"
+    alive = [c for c in state["cards"] if c["status"] != "dead"]
     lines = ["【%s】%s" % (ev["place"], ev["title"]), ev["text"]]
+    if ev.get("threat"):
+        lines.append("（⚠️ 这是威胁类事件，也可以直接 bribe %d 花 %d 金买通，跳过掷骰）" % (idx, ev["bribe_cost"]))
     for i, a in enumerate(ev["approaches"]):
-        diff_label = ("低" if a["difficulty"] <= 6 else "中" if a["difficulty"] <= 9 else
-                      "高" if a["difficulty"] <= 12 else "极高")
-        lines.append("  %d) %s ｜ 属性:%s ｜ 难度:%s" % (i, a["label"], ATTR_LABEL[a["attr"]], diff_label))
+        lines.append("  %d) %s ｜ 属性:%s ｜ 难度线:%d" % (i, a["label"], ATTR_LABEL[a["attr"]], a["difficulty"]))
+        odds = []
+        for c in alive:
+            p = _chance(c, a["attr"], a["difficulty"])
+            odds.append("%s(%s%d):%d%%" % (c["name"], ATTR_LABEL[a["attr"]][0], _effective_attr(c, a["attr"]), int(p * 100)))
+        lines.append("      " + "　".join(odds))
     return "\n".join(lines)
 
 
@@ -1162,8 +1215,8 @@ HELP_TEXT = """🏛 金丝笼 · 可用指令
   new [seed] [weeks]         开一局新的（weeks: 3或5，默认5）
   status                     查看状态面板
   board                      查看今日场所与事件
-  approach <编号>             查看某事件的应对方式（不含具体数字，靠估算）
-  preview <编号> <方式> <卡>   查看某张卡用某种方式应对的成功率
+  approach <编号>             查看某事件的应对方式，直接列出全部存活卡牌的成功率
+  preview <编号> <方式> <卡>   单独查一张卡的成功率（approach 已经包含这个信息，很少需要单用）
   dispatch <编号> <方式> <卡>  派遣一张卡去处理事件（消耗1行动点）
   talk <卡id>                夜谈（每天1次，羁绊+4；第3次揭示秘密+情报）
   endday                     结束今天，推进到下一天
